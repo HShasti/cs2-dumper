@@ -25,20 +25,24 @@ macro_rules! pattern_map {
                 pub(super) const PATTERNS: Map<
                     &'static str,
                     (
-                        &'static [Atom],
+                        &'static str, // Pattern string
+                        &'static [Atom], // Compiled pattern
                         Option<fn(&PeView, &mut BTreeMap<String, Rva>, Rva)>,
                     ),
                 > = phf_map! {
-                    $($name => ($pattern, $($callback)?)),+
+                    $($name => ($pattern.into(), pattern!($pattern), $($callback)?)),+
                 };
 
-                pub fn offsets(view: PeView<'_>) -> BTreeMap<String, Rva> {
-                    let mut map = BTreeMap::new();
+                pub fn offsets(view: PeView<'_>) -> (BTreeMap<String, Rva>, BTreeMap<String, String>) {
+                    let mut offset_map = BTreeMap::new();
+                    let mut pattern_map = BTreeMap::new();
 
-                    for (&name, (pat, callback)) in &PATTERNS {
-                        let mut save = vec![0; save_len(pat)];
+                    for (&name, (pattern_str, compiled_pat, callback)) in &PATTERNS {
+                        pattern_map.insert(name.to_string(), pattern_str.to_string());
 
-                        if !view.scanner().finds_code(pat, &mut save) {
+                        let mut save = vec![0; save_len(compiled_pat)];
+
+                        if !view.scanner().finds_code(compiled_pat, &mut save) {
                             error!("outdated pattern: {}", name);
 
                             continue;
@@ -46,14 +50,14 @@ macro_rules! pattern_map {
 
                         let rva = save[1];
 
-                        map.insert(name.to_string(), rva);
+                        offset_map.insert(name.to_string(), rva);
 
                         if let Some(callback) = callback {
-                            callback(&view, &mut map, rva);
+                            callback(&view, &mut offset_map, rva);
                         }
                     }
 
-                    for (name, value) in &map {
+                    for (name, value) in &offset_map {
                         debug!(
                             "found offset: {} at {:#X} ({}.dll + {:#X})",
                             name,
@@ -63,7 +67,7 @@ macro_rules! pattern_map {
                         );
                     }
 
-                    map
+                    (offset_map, pattern_map)
                 }
             }
         )+
@@ -72,65 +76,68 @@ macro_rules! pattern_map {
 
 pattern_map! {
     client => {
-        "dwCSGOInput" => pattern!("488905${'} 0f57c0 0f1105") => Some(|view, map, rva| {
+        "dwCSGOInput" => "488905${'} 0f57c0 0f1105" => Some(|view, map, rva| {
             let mut save = [0; 2];
 
             if view.scanner().finds_code(pattern!("f2410f108430u4"), &mut save) {
                 map.insert("dwViewAngles".to_string(), rva + save[1]);
             }
         }),
-        "dwEntityList" => pattern!("488935${'} 4885f6") => None,
-        "dwGameEntitySystem" => pattern!("488b1d${'} 48891d") => None,
-        "dwGameEntitySystem_highestEntityIndex" => pattern!("8b81u2?? 8902 488bc2 c3 cccccccc 48895c24? 48896c24") => None,
-        "dwGameRules" => pattern!("48891d${'} ff15${} 84c0") => None,
-        "dwGlobalVars" => pattern!("488915${'} 488942") => None,
-        "dwGlowManager" => pattern!("488b05${'} c3 cccccccccccccccc 8b41") => None,
-        "dwLocalPlayerController" => pattern!("488905${'} 8b9e") => None,
-        "dwPlantedC4" => pattern!("488b15${'} 41ffc0") => None,
-        "dwPrediction" => pattern!("488d05${'} c3 cccccccccccccccc 4883ec? 8b0d") => Some(|_view, map, rva| {
+        "dwEntityList" => "488935${'} 4885f6" => None,
+        "dwGameEntitySystem" => "488b1d${'} 48891d" => None,
+        "dwGameEntitySystem_highestEntityIndex" => "8b81u2?? 8902 488bc2 c3 cccccccc 48895c24? 48896c24" => None,
+        "dwGameRules" => "48891d${'} ff15${} 84c0" => None,
+        "dwGlobalVars" => "488915${'} 488942" => None,
+        "dwGlowManager" => "488b05${'} c3 cccccccccccccccc 8b41" => None,
+        "dwLocalPlayerController" => "488905${'} 8b9e" => None,
+        "dwPlantedC4" => "488b15${'} 41ffc0" => None,
+        "dwPrediction" => "488d05${'} c3 cccccccccccccccc 4883ec? 8b0d" => Some(|_view, map, rva| {
             map.insert("dwLocalPlayerPawn".to_string(), rva + 0x180);
         }),
-        "dwSensitivity" => pattern!("488d0d${[8]'} 440f28c1 0f28f3 0f28fa e8") => None,
-        "dwSensitivity_sensitivity" => pattern!("ff50u1 4c8bc6 488d55? 488bcf e8${} 84c0 0f85${} 4c8d45? 8bd3 488bcf e8${} e9${} f30f1006") => None,
-        "dwViewMatrix" => pattern!("488d0d${'} 48c1e006") => None,
-        "dwViewRender" => pattern!("488905${'} 488bc8 4885c0") => None,
-        "dwWeaponC4" => pattern!("488b15${'} 488b5c24? ffc0 8905[4] 488bc7") => None,
+        "dwSensitivity" => "488d0d${[8]'} 440f28c1 0f28f3 0f28fa e8" => None,
+        "dwSensitivity_sensitivity" => "ff50u1 4c8bc6 488d55? 488bcf e8${} 84c0 0f85${} 4c8d45? 8bd3 488bcf e8${} e9${} f30f1006" => None,
+        "dwViewMatrix" => "488d0d${'} 48c1e006" => None,
+        "dwViewRender" => "488905${'} 488bc8 4885c0" => None,
+        "dwWeaponC4" => "488b15${'} 488b5c24? ffc0 8905[4] 488bc7" => None,
     },
     engine2 => {
-        "dwBuildNumber" => pattern!("8905${'} 488d0d${} ff15${} 488b0d") => None,
-        "dwNetworkGameClient" => pattern!("48893d${'} 488d15") => None,
-        "dwNetworkGameClient_clientTickCount" => pattern!("8b81u4 c3 cccccccccccccccccc 8b81${} c3 cccccccccccccccccc 83b9") => None,
-        "dwNetworkGameClient_deltaTick" => pattern!("89b3u4 8b45") => None,
-        "dwNetworkGameClient_isBackgroundMap" => pattern!("0fb681u4 c3 cccccccccccccccc 0fb681${} c3 cccccccccccccccc 48895c24") => None,
-        "dwNetworkGameClient_localPlayer" => pattern!("4883c0u1 488d0440 8b0cc1") => Some(|_view, map, rva| {
+        "dwBuildNumber" => "8905${'} 488d0d${} ff15${} 488b0d" => None,
+        "dwNetworkGameClient" => "48893d${'} 488d15" => None,
+        "dwNetworkGameClient_clientTickCount" => "8b81u4 c3 cccccccccccccccccc 8b81${} c3 cccccccccccccccccc 83b9" => None,
+        "dwNetworkGameClient_deltaTick" => "89b3u4 8b45" => None,
+        "dwNetworkGameClient_isBackgroundMap" => "0fb681u4 c3 cccccccccccccccc 0fb681${} c3 cccccccccccccccc 48895c24" => None,
+        "dwNetworkGameClient_localPlayer" => "4883c0u1 488d0440 8b0cc1" => Some(|_view, map, rva| {
             // .text 48 83 C0 0A | add rax, 0Ah
             // .text 48 8D 04 40 | lea rax, [rax + rax * 2]
             // .text 8B 0C C1    | mov ecx, [rcx + rax * 8]
             map.insert("dwNetworkGameClient_localPlayer".to_string(), (rva + (rva * 2)) * 8);
         }),
-        "dwNetworkGameClient_maxClients" => pattern!("8b81u4 c3cccccccccccccccccc 8b81${} ffc0") => None,
-        "dwNetworkGameClient_serverTickCount" => pattern!("8b81u4 c3 cccccccccccccccccc 83b9") => None,
-        "dwNetworkGameClient_signOnState" => pattern!("448b81u4 488d0d") => None,
-        "dwWindowHeight" => pattern!("8b05${'} 8903") => None,
-        "dwWindowWidth" => pattern!("8b05${'} 8907") => None,
+        "dwNetworkGameClient_maxClients" => "8b81u4 c3cccccccccccccccccc 8b81${} ffc0" => None,
+        "dwNetworkGameClient_serverTickCount" => "8b81u4 c3 cccccccccccccccccc 83b9" => None,
+        "dwNetworkGameClient_signOnState" => "448b81u4 488d0d" => None,
+        "dwWindowHeight" => "8b05${'} 8903" => None,
+        "dwWindowWidth" => "8b05${'} 8907" => None,
     },
     input_system => {
-        "dwInputSystem" => pattern!("488905${'} 488d05") => None,
+        "dwInputSystem" => "488905${'} 488d05" => None,
     },
     matchmaking => {
-        "dwGameTypes" => pattern!("488d0d${'} 33d2") => None,
-        "dwGameTypes_mapName" => pattern!("488b81u4 4885c074? 4883c0") => None,
+        "dwGameTypes" => "488d0d${'} 33d2" => None,
+        "dwGameTypes_mapName" => "488b81u4 4885c074? 4883c0" => None,
     },
     soundsystem => {
-        "dwSoundSystem" => pattern!("488d05${'} c3 cccccccccccccccc 488915") => None,
-        "dwSoundSystem_engineViewData" => pattern!("0f1147u1 0f104b") => None,
+        "dwSoundSystem" => "488d05${'} c3 cccccccccccccccc 488915" => None,
+        "dwSoundSystem_engineViewData" => "0f1147u1 0f104b" => None,
     },
 }
 
-pub fn offsets<P: Process + MemoryView>(process: &mut P) -> Result<OffsetMap> {
-    let mut map = BTreeMap::new();
+pub type PatternMap = BTreeMap<String, BTreeMap<String, String>>;
 
-    let modules: [(&str, fn(PeView) -> BTreeMap<String, u32>); 5] = [
+pub fn offsets<P: Process + MemoryView>(process: &mut P) -> Result<(OffsetMap, PatternMap)> {
+    let mut offset_map_all = BTreeMap::new();
+    let mut pattern_map_all = BTreeMap::new();
+
+    let modules: [(&str, fn(PeView) -> (BTreeMap<String, u32>, BTreeMap<String, String>)); 5] = [
         ("client.dll", client::offsets),
         ("engine2.dll", engine2::offsets),
         ("inputsystem.dll", input_system::offsets),
@@ -138,7 +145,7 @@ pub fn offsets<P: Process + MemoryView>(process: &mut P) -> Result<OffsetMap> {
         ("soundsystem.dll", soundsystem::offsets),
     ];
 
-    for (module_name, offsets) in &modules {
+    for (module_name, offsets_fn) in &modules {
         let module = process.module_by_name(module_name)?;
 
         let buf = process
@@ -147,10 +154,12 @@ pub fn offsets<P: Process + MemoryView>(process: &mut P) -> Result<OffsetMap> {
 
         let view = PeView::from_bytes(&buf)?;
 
-        map.insert(module_name.to_string(), offsets(view));
+        let (module_offsets, module_patterns) = offsets_fn(view);
+        offset_map_all.insert(module_name.to_string(), module_offsets);
+        pattern_map_all.insert(module_name.to_string(), module_patterns);
     }
 
-    Ok(map)
+    Ok((offset_map_all, pattern_map_all))
 }
 
 #[cfg(test)]
