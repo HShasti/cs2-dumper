@@ -4,6 +4,7 @@ pub use offsets::*;
 pub use schemas::*;
 
 use std::any::type_name;
+use std::collections::BTreeMap;
 
 use anyhow::Result;
 
@@ -22,6 +23,7 @@ pub struct AnalysisResult {
     pub interfaces: InterfaceMap,
     pub offsets: OffsetMap,
     pub schemas: SchemaMap,
+    pub patterns: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 pub fn analyze_all<P: Process + MemoryView>(process: &mut P) -> Result<AnalysisResult> {
@@ -40,7 +42,7 @@ pub fn analyze_all<P: Process + MemoryView>(process: &mut P) -> Result<AnalysisR
         interfaces.len()
     );
 
-    let offsets = analyze(process, offsets);
+    let (offsets, patterns) = analyze(process, offsets);
 
     info!(
         "found {} offsets across {} modules",
@@ -49,6 +51,15 @@ pub fn analyze_all<P: Process + MemoryView>(process: &mut P) -> Result<AnalysisR
             .map(|(_, offsets)| offsets.len())
             .sum::<usize>(),
         offsets.len()
+    );
+
+    info!(
+        "extracted {} patterns across {} modules",
+        patterns
+            .iter()
+            .map(|(_, patterns)| patterns.len())
+            .sum::<usize>(),
+        patterns.len()
     );
 
     let schemas = analyze(process, schemas);
@@ -72,6 +83,7 @@ pub fn analyze_all<P: Process + MemoryView>(process: &mut P) -> Result<AnalysisR
         interfaces,
         offsets,
         schemas,
+        patterns,
     })
 }
 

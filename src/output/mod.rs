@@ -18,13 +18,17 @@ mod buttons;
 mod formatter;
 mod interfaces;
 mod offsets;
+mod patterns;
 mod schemas;
+
+use std::collections::BTreeMap;
 
 enum Item<'a> {
     Buttons(&'a ButtonMap),
     Interfaces(&'a InterfaceMap),
     Offsets(&'a OffsetMap),
     Schemas(&'a SchemaMap),
+    Patterns(&'a BTreeMap<String, BTreeMap<String, String>>),
 }
 
 impl<'a> Item<'a> {
@@ -52,6 +56,7 @@ impl<'a> CodeWriter for Item<'a> {
             Item::Buttons(buttons) => buttons.write_cs(fmt),
             Item::Interfaces(ifaces) => ifaces.write_cs(fmt),
             Item::Offsets(offsets) => offsets.write_cs(fmt),
+            Item::Patterns(patterns) => patterns.write_cs(fmt),
             Item::Schemas(schemas) => schemas.write_cs(fmt),
         }
     }
@@ -61,6 +66,7 @@ impl<'a> CodeWriter for Item<'a> {
             Item::Buttons(buttons) => buttons.write_hpp(fmt),
             Item::Interfaces(ifaces) => ifaces.write_hpp(fmt),
             Item::Offsets(offsets) => offsets.write_hpp(fmt),
+            Item::Patterns(patterns) => patterns.write_hpp(fmt),
             Item::Schemas(schemas) => schemas.write_hpp(fmt),
         }
     }
@@ -70,6 +76,7 @@ impl<'a> CodeWriter for Item<'a> {
             Item::Buttons(buttons) => buttons.write_json(fmt),
             Item::Interfaces(ifaces) => ifaces.write_json(fmt),
             Item::Offsets(offsets) => offsets.write_json(fmt),
+            Item::Patterns(patterns) => patterns.write_json(fmt),
             Item::Schemas(schemas) => schemas.write_json(fmt),
         }
     }
@@ -79,6 +86,7 @@ impl<'a> CodeWriter for Item<'a> {
             Item::Buttons(buttons) => buttons.write_rs(fmt),
             Item::Interfaces(ifaces) => ifaces.write_rs(fmt),
             Item::Offsets(offsets) => offsets.write_rs(fmt),
+            Item::Patterns(patterns) => patterns.write_rs(fmt),
             Item::Schemas(schemas) => schemas.write_rs(fmt),
         }
     }
@@ -115,6 +123,7 @@ impl<'a> Output<'a> {
             ("buttons", Item::Buttons(&self.result.buttons)),
             ("interfaces", Item::Interfaces(&self.result.interfaces)),
             ("offsets", Item::Offsets(&self.result.offsets)),
+            ("patterns", Item::Patterns(&self.result.patterns)),
         ];
 
         for (file_name, item) in &items {
