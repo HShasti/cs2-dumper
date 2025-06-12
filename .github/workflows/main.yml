@@ -1,0 +1,25 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build
+        run: cargo build --release --verbose
+
+      - name: Run tests
+        run: cargo test -- --nocapture
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/release/cs2-dumper
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
