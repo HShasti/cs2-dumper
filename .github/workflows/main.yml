@@ -1,25 +1,35 @@
-name: Release
+name: Build Windows Executable
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ "main" ] # Runs on pushes to the main branch
+  pull_request:
+    branches: [ "main" ] # Runs on pull requests targeting the main branch
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+    # Use a Windows runner to build the .exe
+    runs-on: windows-latest
 
-      - name: Build
+    steps:
+      # 1. Get the code from the repository
+      - uses: actions/checkout@v4
+
+      # 2. Install the Rust toolchain
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-pc-windows-msvc # Specify the target for Windows
+          override: true
+
+      # 3. Build the application in release mode
+      - name: Build executable
         run: cargo build --release --verbose
 
-      - name: Run tests
-        run: cargo test -- --nocapture
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      # 4. Upload the .exe file as a build artifact
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: target/release/cs2-dumper
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: cs2-dumper-windows
+          path: target/release/cs2-dumper.exe
